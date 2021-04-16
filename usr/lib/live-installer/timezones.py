@@ -29,7 +29,7 @@ LIGHTS_IM = Image.open(TIMEZONE_RESOURCES + 'lights.png').crop((0,0,IM_X,IM_Y)).
 
 MAP_CENTER = (373, 263)  # pixel center of where equatorial line and 0th meridian cross on our bg map; WARNING: cc.png relies on this exactly!
 MAP_SIZE = BACK_IM.size  # size of the map image
-assert MAP_SIZE == (IM_X, IM_Y_ORG), 'MAP_CENTER (et al.?) calculations depend on this size'
+#assert MAP_SIZE == (IM_X, IM_Y_ORG), 'MAP_CENTER (et al.?) calculations depend on this size'
 
 def debug(func):
     '''Decorator to print function call details - parameters names and effective values'''
@@ -76,11 +76,11 @@ Timezone = namedtuple('Timezone', 'name ccode x y'.split())
 
 @debug
 def build_timezones(_installer):
-    global installer, time_label, time_label_box, timezone
+    global installer, time_label, time_label_box, timezone, time_tree_model
     installer = _installer
 
     cssProvider = Gtk.CssProvider()
-    cssProvider.load_from_path('/usr/share/live-installer/style.css')
+    cssProvider.load_from_path('/usr/share/live-installer/style.scss')
     screen = Gdk.Screen.get_default()
     styleContext = Gtk.StyleContext()
     styleContext.add_provider_for_screen(screen, cssProvider, Gtk.STYLE_PROVIDER_PRIORITY_USER)
@@ -101,19 +101,23 @@ def build_timezones(_installer):
         return defaultdict(autovivified)
     hierarchy = autovivified()
 
+    time_tree_model = Gtk.ListStore(str,str)
+    time_tree_model.set_sort_column_id (0, Gtk.SortType.ASCENDING)
+    
     for line in getoutput("awk '/^[^#]/{ print $1,$2,$3 }' /usr/share/zoneinfo/zone.tab | sort -k3").split('\n'):
         ccode, coords, name = line.split()
         lat, lon = TZ_SPLIT_COORDS.search(coords).groups()
         x, y = pixel_position(to_float(lat, 2), to_float(lon, 3))
         if x < 0: x = MAP_SIZE[0] + x
         tup = Timezone(name, ccode, x, y)
-        if(ccode != 'AQ' and ccode != 'AU'):
-            submenu = hierarchy
-            parts = name.split('/')
-            for i, part in enumerate(parts, 1):
-                if i != len(parts): submenu = submenu[part]
-                else: submenu[part] = tup
-            timezones.append(tup)
+        submenu = hierarchy
+        parts = name.split('/')
+        for i, part in enumerate(parts, 1):
+            if i != len(parts): submenu = submenu[part]
+            else: submenu[part] = tup
+
+        timezones.append(tup)
+        tree_iter = time_tree_model.append((tup.name,tup.ccode))
 
     def _build_menu(d):
         menu = Gtk.Menu()
@@ -130,10 +134,17 @@ def build_timezones(_installer):
         return menu
 
     tz_menu = _build_menu(hierarchy)
+
     #print(dir(tz_menu.props))
     tz_menu.show()
     installer.builder.get_object('button_timezones').connect('event', cb_button_timezones, tz_menu)
-    
+
+    combobox = installer.builder.get_object('combobox_timezones')
+    combobox.set_model(time_tree_model)
+    renderer_text = Gtk.CellRendererText()
+    combobox.pack_start(renderer_text,True)
+    combobox.add_attribute(renderer_text, "text", 0)
+
 # Set default UTC+9
 adjust_time = timedelta(hours=9)
 
@@ -217,7 +228,6 @@ def select_timezone(tz):
                             minutes=int(tzadj[0] + tzadj[2]))
 
     installer.setup.timezone = tz.name
-    installer.builder.get_object("button_timezones").set_label(tz.name)
     # Move the current time label to appropriate position
     x, y = tz.x, tz.y
     if x + time_label_box.get_allocation().width + 4 > MAP_SIZE[0]: 
@@ -226,6 +236,22 @@ def select_timezone(tz):
         y -= time_label_box.get_allocation().height
 
     installer.builder.get_object("fixed_timezones").move(time_label_box, x, y)
+
+    def print_tree_store(store):
+        rootiter = store.get_iter_first()
+        print_rows(store, rootiter, "")
+
+    def print_rows(store, treeiter, indent):
+        while treeiter is not None:
+            if ( store[treeiter][0] == tz.name):
+                installer.builder.get_object('combobox_timezones').set_active_iter(treeiter)
+                break
+            if store.iter_has_child(treeiter):
+                childiter = store.iter_children(treeiter)
+                print_rows(store, childiter, indent + "\t")
+            treeiter = store.iter_next(treeiter)
+
+    print_tree_store (time_tree_model)
 
 def _get_x_offset():
     now = datetime.utcnow().timetuple()

@@ -1,3 +1,27 @@
+live-installer (2021.04.01+grm2u1+han2u2) unstable; urgency=medium
+
+  [ boyeon.choi ]
+  * [2dd81659] Adjusted the window size  according to resolution
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Fri, 02 Apr 2021 17:06:00 +0900
+
+live-installer (2021.04.01+grm2u1+han2u1) unstable; urgency=medium
+
+  [ boyeon.choi ]
+  * [e9723983] Hancom 2.2 init
+  * [186a2e54] Rounded the edge
+  * [6d003ae1] [Bug:3378] Fixed to run only one process
+  * [9d61b9fc] [Bug:3384] Fixed the typo:Test Keyboard
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Thu, 01 Apr 2021 12:20:21 +0900
+
+live-installer (2020.09.15+grm2u1+han2u1) unstable; urgency=medium
+
+  [ boyeon.choi ]
+  * [47adace0] Modification of Hancom Gooroom UI
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Mon, 15 Mar 2021 14:43:05 +0900
+
 live-installer (2020.07.14+grm2u1+han2u1) unstable; urgency=medium
 
   [ boyeon.choi ]

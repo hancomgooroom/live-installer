@@ -1,0 +1,120 @@
+label { font-family: NotoSansCJKkr; }
+
+#TimezoneLabel {
+  color: #FFFFFF;
+  background-color: #000000;
+  border-radius: 5px;
+}
+#main_window:backdrop {
+  box-shadow: 0 2px 8px 3px rgba(0, 0, 0, 0.85);
+}
+main_window,
+box#installer_window {
+  border-radius: 16px;
+  background-color: #1c1c1c;
+}
+box#right_box {
+  border-radius: 0px 16px 16px 0px;
+  background-color: #ffffff;
+}
+
+.label_button {
+    font-family: NotoSansCJKkr;
+    font-size: 11px;
+    color: #0251ff;
+    text-decoration: underline;
+    background-color: #ffffff;
+}
+
+.entry {
+  border-radius: 5px;
+  background-color: rgba(201, 201, 201, 0.6);
+  border-color: rgba(201, 201, 201, 0.6);
+  font-family: NotoSansCJKkr;
+  font-size: 11px;
+  }.entry:focus {
+    border-color: #4a90e2;
+    background-color: #ffffff;
+}
+.combobox > box > button.combo{
+  border-radius: 5px;
+  background-color: rgba(201, 201, 201, 0.6);
+  font-family: NotoSansCJKkr;
+  }.combobox > box > button.combo > box > arrow {
+    min-width: 24px;
+    min-height: 15px;
+    -gtk-icon-source: -gtk-scaled(url('/usr/share/live-installer/own/show-arrow.svg'));
+}
+.combobox > window > menu {
+  font-family: NotoSansCJKkr;
+  box-shadow: 0 2px 6px 0 rgba(0, 0, 0, 0.05);
+  background-color: #e2e2e2;
+  }.combobox > window > menu > arrow {
+    background-color: #e2e2e2;
+/*
+  }.combobox > window > menu > arrow.top {
+    -gtk-icon-source: -gtk-scaled(url('/usr/share/live-installer/own/hide-arrow.svg'));
+  }.combobox > window > menu > arrow.bottom {
+    background-image: url('/usr/share/live-installer/own/show-arrow.svg');
+    background-repeat: no-repeat;
+    background-position: center;
+*/
+}
+
+menuitem:hover{ 
+  background: rgba(0, 0, 0, 0.1);
+  font-family: NotoSansCJKkr;
+  color: #000000;
+}
+
+#button_go_setting, #button_go_back{
+    background-image: url('/usr/share/live-installer/own/back.svg');
+    background-repeat: no-repeat;
+    background-position: center;
+    border-radius: 5px;
+    background-color: #ffffff;
+    border-color: #ffffff;
+}   #button_go_setting:hover, #button_go_back:hover{
+        background-image: url('/usr/share/live-installer/own/mouse-over.svg');
+        background-repeat: no-repeat;
+        background-position: center;
+    }#button_go_setting:active, #button_go_back:active{  
+        background-image: url('/usr/share/live-installer/own/pressed.svg');
+        background-repeat: no-repeat;
+        background-position: center;
+}
+
+#button_next, #button_back, #button_reboot{
+  min-width: 98px;
+  min-height: 30px;
+  border-radius: 5px;
+  background-color: #4a73d6;
+  font-family: NotoSansCJKkr;
+  color: #ffffff;
+}
+#button_next:hover, #button_back:hover, #button_reboot:hover { background-color: #3b61bd;   }
+#button_next:disabled{
+  background-color: #9b9b9b;  
+  font-family: NotoSansCJKkr;
+  color: #ffffff;
+}
+
+#button_stop{
+  border-radius: 5px;
+  background-color: #9b9b9b;
+  border-color: #9b9b9b;
+  font-family: NotoSansCJKkr;
+  font-size: 11px;
+  color: #ffffff;
+}
+#button_stop:hover { background-color: #828282;  }
+
+#button_show_consent {
+    border-color: #ffffff;
+    background-color:#ffffff;
+}
+#button_key_test {
+    border-color: #ffffff;
+    color:#0251ff;
+    background-color:#ffffff;
+}
