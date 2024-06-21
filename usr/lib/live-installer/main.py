@@ -15,8 +15,5 @@ from gi.repository import Gtk
 
 # main entry
 if __name__ == "__main__":
-	if("install" in subprocess.getoutput("cat /proc/cmdline")):
-		win = InstallerWindow(fullscreen=True)
-	else:
-		win = InstallerWindow(fullscreen=False)
+	win = InstallerWindow()
 	Gtk.main()

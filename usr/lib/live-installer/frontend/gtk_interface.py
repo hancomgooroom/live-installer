@@ -45,10 +45,9 @@ def idle(func):
 
 
 class WizardPage:
-
-    def __init__(self, help_text, icon):
-        self.help_text = help_text
-        self.icon = icon
+    def __init__(self, title, description):
+        self.title = title
+        self.desc = description
 
 class InstallerWindow:
     # Cancelable timeout for keyboard preview generation, which is
@@ -56,7 +55,7 @@ class InstallerWindow:
     # the keyboard layout list
     kbd_preview_generation = -1
 
-    def __init__(self, fullscreen=False):
+    def __init__(self):
 
         #Disable the screensaver
         if not __debug__:
@@ -82,30 +81,41 @@ class InstallerWindow:
         # load the window object
         self.window = self.builder.get_object("main_window")
         self.window.connect("delete-event", self.quit_cb)
+        self.button_next = self.builder.get_object("button_next")
+        self.button_back = self.builder.get_object("button_back")
 
         # Wizard pages
-        (self.PAGE_LANGUAGE,
+        (self.PAGE_INTRO,
+         self.PAGE_SETTING,
          self.PAGE_PARTITIONS,
-         self.PAGE_KEYBOARD,
          self.PAGE_OVERVIEW,
          self.PAGE_INSTALL,
-         self.PAGE_TIMEZONE,
-         self.PAGE_CUSTOMWARNING,
-         self.PAGE_CUSTOMPAUSED) = list(range(8))
-        self.wizard_pages = list(range(8))
-        self.wizard_pages[self.PAGE_LANGUAGE] = WizardPage(_("Language"), "locales.png")
-        self.wizard_pages[self.PAGE_TIMEZONE] = WizardPage(_("Timezone"), "time.png")
-        self.wizard_pages[self.PAGE_KEYBOARD] = WizardPage(_("Keyboard layout"), "keyboard.png")
-        self.wizard_pages[self.PAGE_PARTITIONS] = WizardPage(_("Partitioning"), "hdd.svg")
-        self.wizard_pages[self.PAGE_CUSTOMWARNING] = WizardPage(_("Please make sure you wish to manage partitions manually"), "hdd.svg")
-        self.wizard_pages[self.PAGE_OVERVIEW] = WizardPage(_("Summary"), "summary.png")
-        self.wizard_pages[self.PAGE_INSTALL] = WizardPage(_("Installing Gooroom Platform"), "install.png")
-        self.wizard_pages[self.PAGE_CUSTOMPAUSED] = WizardPage(_("Installation paused: please finish the custom installation"), "install.png")
+         self.PAGE_FINISH) = range(6)
+        self.wizard_pages = list(range(6))
 
         # set the button events (wizard_cb)
+        self.builder.get_object("start_gooroom_btn").connect("clicked", self.wizard_cb, False)
         self.builder.get_object("button_next").connect("clicked", self.wizard_cb, False)
         self.builder.get_object("button_back").connect("clicked", self.wizard_cb, True)
         self.builder.get_object("button_quit").connect("clicked", self.quit_cb)
+        self.builder.get_object("button_min").connect("clicked", self.min_cb)
+        self.builder.get_object("btn_cancel").connect("clicked", self.quit_cb)
+        self.builder.get_object("restart_gooroom_btn").connect("clicked", self.button_reboot_cb)
+
+        self.button_key_test = Gtk.Button.new()
+        self.button_key_test.set_name("button_key_test")
+        self.builder.get_object("move_key_test").pack_end(self.button_key_test,False,False,0)
+        self.button_key_test.connect("clicked", self.show_test_keyboard)
+
+        self.button_show_consent = Gtk.Button.new();
+        self.button_label = Gtk.Label.new("keyboard");
+        self.button_show_consent.add(self.button_label)
+        self.button_show_consent.set_name("button_show_consent")
+        self.builder.get_object("move_consent").pack_end(self.button_show_consent,False,False,0)
+        self.button_show_consent.connect("clicked", self.show_consent_form)
+
+        self.is_consent (self.builder.get_object("button_agree"))
+        self.builder.get_object("button_agree").connect("toggled", self.is_consent)
 
         col = Gtk.TreeViewColumn("", Gtk.CellRendererPixbuf(), pixbuf=2)
         self.builder.get_object("treeview_language_list").append_column(col)
@@ -119,19 +129,65 @@ class InstallerWindow:
 
         self.builder.get_object("treeview_language_list").connect("cursor-changed", self.assign_language)
 
+        self.builder.get_object("combobox_language").connect("changed", self.assign_lang)
+
         # build the language list
+        combobox = self.builder.get_object("combobox_language")
+        renderer_text = Gtk.CellRendererText()
+        combobox.pack_start(renderer_text,True)
+        combobox.add_attribute(renderer_text, "text", 0)
+
         self.build_lang_list()
 
         # build timezones
-        self.map_scrollable()
         model = timezones.build_timezones(self)
-        self.builder.get_object("button_timezones").set_label(_('Select timezone'))
-        self.builder.get_object("event_timezones").connect('button-release-event', timezones.cb_map_clicked, model)
+        lang_country_code = self.setup.language.split('_')[-1]
+        for value in (self.cur_timezone,      # timezone guessed from IP
+                        self.cur_country_code,  # otherwise pick country from IP
+                        lang_country_code):     # otherwise use country from language selection
+            if not value:
+                continue
+            for row in timezones.timezones:
+                if value in row:
+                    timezones.select_timezone(row)
+                    break
+            break
+        self.builder.get_object("combobox_timezones").connect("changed",self.combobox_timezones_changed_cb) 
+
+        # kb models
+        cell = Gtk.CellRendererText()
+        self.builder.get_object("combobox_kb_model").pack_start(cell, True)
+        self.builder.get_object("combobox_kb_model").add_attribute(cell, 'text', 0)
+        self.builder.get_object("combobox_kb_model").connect("changed", self.assign_keyboard_model)
+
+        # kb layouts
+        ren = Gtk.CellRendererText()
+        self.column10 = Gtk.TreeViewColumn(_("Layout"), ren)
+        self.column10.add_attribute(ren, "text", 0)
+        self.builder.get_object("treeview_layouts").append_column(self.column10)
+        self.builder.get_object("treeview_layouts").connect("cursor-changed", self.assign_keyboard_layout)
+
+        ren = Gtk.CellRendererText()
+        self.column11 = Gtk.TreeViewColumn(_("Variant"), ren)
+        self.column11.add_attribute(ren, "text", 0)
+        self.builder.get_object("treeview_variants").append_column(self.column11)
+        #self.builder.get_object("treeview_variants").connect("cursor-changed", self.assign_keyboard_variant)
+        rentext = Gtk.CellRendererText()
+        cell = Gtk.CellRendererText()
+        self.builder.get_object("combobox_layout").pack_start(rentext, True)
+        self.builder.get_object("combobox_layout").add_attribute(rentext, 'text', 0)
+        self.builder.get_object("combobox_layout").connect("changed", self.assign_keyboard_variant)
+ 
+        self.build_kb_lists()
+        self.build_kb_variants()
+
+        self.builder.get_object("label_key_test").set_label(_("Please enter a test letter."))
 
         # partitions
         #self.builder.get_object("button_custommount").connect("clicked", self.show_customwarning)
         self.builder.get_object("button_edit").connect("clicked", partitioning.manually_edit_partitions)
         self.builder.get_object("button_refresh").connect("clicked", lambda _: partitioning.build_partitions(self))
+        self.builder.get_object("treeview_disks").get_model()
         self.builder.get_object("treeview_disks").get_selection().connect("changed", partitioning.update_html_preview)
         self.builder.get_object("treeview_disks").connect("row_activated", partitioning.edit_partition_dialog)
         self.builder.get_object("treeview_disks").connect("button-release-event", partitioning.partitions_popup_menu)
@@ -156,27 +212,6 @@ class InstallerWindow:
         grub_check.set_active(True)
         grub_box.set_sensitive(True)
         
-        # kb models
-        cell = Gtk.CellRendererText()
-        self.builder.get_object("combobox_kb_model").pack_start(cell, True)
-        self.builder.get_object("combobox_kb_model").add_attribute(cell, 'text', 0)
-        self.builder.get_object("combobox_kb_model").connect("changed", self.assign_keyboard_model)
-
-        # kb layouts
-        ren = Gtk.CellRendererText()
-        self.column10 = Gtk.TreeViewColumn(_("Layout"), ren)
-        self.column10.add_attribute(ren, "text", 0)
-        self.builder.get_object("treeview_layouts").append_column(self.column10)
-        self.builder.get_object("treeview_layouts").connect("cursor-changed", self.assign_keyboard_layout)
-
-        ren = Gtk.CellRendererText()
-        self.column11 = Gtk.TreeViewColumn(_("Variant"), ren)
-        self.column11.add_attribute(ren, "text", 0)
-        self.builder.get_object("treeview_variants").append_column(self.column11)
-        self.builder.get_object("treeview_variants").connect("cursor-changed", self.assign_keyboard_variant)
-
-        self.build_kb_lists()
-
         # 'about to install' aka overview
         ren = Gtk.CellRendererText()
         self.column12 = Gtk.TreeViewColumn(_("Overview"), ren)
@@ -195,14 +230,6 @@ class InstallerWindow:
 
         # build partition list
         self.should_pulse = False
-
-        # make sure we're on the right page (no pun.)
-        self.activate_page(self.PAGE_LANGUAGE)
-
-        if(fullscreen):
-            # dedicated installer mode thingum
-            self.window.maximize()
-            self.window.fullscreen()
 
         # Initiate the slide show
         self.slideshow_path = "/usr/share/live-installer/slideshow"
@@ -226,22 +253,15 @@ class InstallerWindow:
         self.partitions_browser.set_background_color(Gdk.RGBA(0, 0, 0, 0))
         self.builder.get_object("scrolled_partitions").add(self.partitions_browser)
 
-        #to support 800x600 resolution
-        #self.window.set_geometry_hints(
-        #                            min_width=750,
-        #                            min_height=500,
-        #                            max_width=750,
-        #                            max_height=500,
-        #                            base_width=750,
-        #                            base_height=500)
+        self.assign_lang(self.builder.get_object("combobox_language"))
+        self.activate_page(self.PAGE_INTRO)
 
-        self.window.show_all()
-
-        # fix text wrap
-        self.fix_text_wrap()
+        self.window.maximize()
 
         #to prevent duplication of partitioning
         self.PARTITIONING_DONE = False
+
+        self.window.show_all()
 
     def update_preview_cb(self, dialog, preview):
         filename = dialog.get_preview_filename()
@@ -307,75 +327,55 @@ class InstallerWindow:
         os.system('convert /tmp/live-installer-face07.jpeg -crop 600x600+100+0 -resize 96x96 /tmp/live-installer-face.png')
 #        self.face_button.set_picture_from_file("/tmp/live-installer-face.png")
 
-    def fix_text_wrap(self):
-        while Gtk.events_pending():
-            Gtk.main_iteration_do(False)
-
-        # this looks bad on resize, but to handle it on resize gracefully requires quite a bit of code (to keep from lagging)
-        width = self.window.get_size()[0] - 75
-
-        # custom install warning
-        self.builder.get_object("label_custom_install_directions_1").set_size_request(width, -1)
-        self.builder.get_object("label_custom_install_directions_1").set_size_request(width, -1)
-        self.builder.get_object("label_custom_install_directions_2").set_size_request(width, -1)
-        self.builder.get_object("label_custom_install_directions_3").set_size_request(width, -1)
-        self.builder.get_object("label_custom_install_directions_4").set_size_request(width, -1)
-        self.builder.get_object("label_custom_install_directions_5").set_size_request(width, -1)
-        self.builder.get_object("label_custom_install_directions_6").set_size_request(width, -1)
-
-        # custom install installation paused directions
-        self.builder.get_object("label_custom_install_paused_1").set_size_request(width, -1)
-        self.builder.get_object("label_custom_install_paused_2").set_size_request(width, -1)
-        self.builder.get_object("label_custom_install_paused_3").set_size_request(width, -1)
-        self.builder.get_object("label_custom_install_paused_4").set_size_request(width, -1)
-        self.builder.get_object("label_custom_install_paused_5").set_size_request(width, -1)
-
     def i18n(self):
-
-        if __debug__:
-            self.window.set_title((_("%s Installer") % self.installer.get_distribution_name()) + ' (debug)')
-        else:
-            self.window.set_title((_("%s Installer") % self.installer.get_distribution_name()))
 
         self.language_column.set_title(_("Language"))
         self.country_column.set_title(_("Country"))
-        self.activate_page(self.PAGE_LANGUAGE)
+
+        desc = _("Thank you for choosing Hancom Gooroom. Several settings are required to install Hancom Gooroom.\nInstallation proceeds after setting up the environment, user information, and partition.\nDo you want to install Hancom Gooroom on this PC?")
+        self.wizard_pages[self.PAGE_INTRO] = WizardPage(_("Install Hancom Gooroom"),desc)
+        desc = _("Select the language, time zone, and keyboard environment required for Hancom Gooroom installation.")
+        self.wizard_pages[self.PAGE_SETTING] = WizardPage(_("Installatiaion First Stage")
+                ,desc)
+        desc = _("If you edit the partition, refresh the information, and select the partition to be installed, you can proceed to the next step.")
+        title = _("Installation Second Stage")
+        self.wizard_pages[self.PAGE_PARTITIONS] = WizardPage(title,desc)
+        desc = _("The preparation for Hancom Gooroom installation is completed. Please check your settings and install Hancom Gooroom.")
+        self.wizard_pages[self.PAGE_OVERVIEW] = WizardPage(_("Ready to Install"), desc)
+        desc = _("Maintain the power of the computer while installing Hancom Gooroom.")
+        self.wizard_pages[self.PAGE_INSTALL] = WizardPage(_("Installing Hancom Gooroom"), desc)
+        title = _("Hancom Gooroom is installed")
+        desc = _("The installation has been successfully completed.\nDo you want to restart your computer to use a new Hancom Gooroom?")
+        self.wizard_pages[self.PAGE_FINISH] = WizardPage(title, desc)
 
         self.builder.get_object("button_cancel").set_label(_("Cancel"))
+        self.builder.get_object("btn_cancel").set_label(_("Cancel"))
         self.builder.get_object("button_ok").set_label(_("OK"))
-        self.builder.get_object("button_quit").set_label(_("Quit"))
+        #self.builder.get_object("button_quit").set_label(_("Quit"))
         self.builder.get_object("button_back").set_label(_("Back"))
         self.builder.get_object("button_next").set_label(_("Next"))
+        self.builder.get_object("restart_gooroom_btn").set_label(_("Reboot"))
+        self.builder.get_object("start_gooroom_btn").set_label(_("Let's get started"))
+
+        self.builder.get_object("label_lang").set_label(_("Language"))
+        self.button_key_test.set_label(_("Test Keyboard"))
+        self.builder.get_object("key_test_window").set_title(_("Test Keyboard"))
+        self.builder.get_object("label_key_test").set_label(_("Please enter a test letter."))
+
+        self.button_label.set_markup(_("<span fgcolor='#000000'>I agree with</span> <span fgcolor='#0251ff'>the Software License.</span>"))
 
         self.builder.get_object("button_edit").set_label(_("Edit partitions"))
         self.builder.get_object("button_refresh").set_label(_("Refresh"))
 
         # timezones
-        self.builder.get_object("label_timezones").set_label(_("Selected timezone:"))
+        self.builder.get_object("label_timezones").set_label(_("Timezone"))
+        self.builder.get_object("label_kb_layout").set_label(_("Keyboard layout"))
+        self.builder.get_object("label_kb_model").set_label(_("Keyboard Model"))
 
         # grub
         self.builder.get_object("label_grub").set_markup("<b>%s</b>" % _("Bootloader"))
         self.builder.get_object("checkbutton_grub").set_label(_("Install GRUB"))
         self.builder.get_object("label_grub_help").set_label(_("GRUB is a bootloader used to load the Linux kernel."))
-
-        # keyboard page
-        self.builder.get_object("label_test_kb").set_label(_("Use this box to test your keyboard layout."))
-        self.builder.get_object("label_kb_model").set_label(_("Model"))
-
-        # custom install warning
-        self.builder.get_object("label_custom_install_directions_1").set_label(_("You have selected to manage your partitions manually, this feature is for ADVANCED USERS ONLY."))
-        self.builder.get_object("label_custom_install_directions_2").set_label(_("Before continuing, please mount your target filesystem(s) at /target."))
-        self.builder.get_object("label_custom_install_directions_3").set_label(_("Do NOT mount virtual devices such as /dev, /proc, /sys, etc on /target/."))
-        self.builder.get_object("label_custom_install_directions_4").set_label(_("During the install, you will be given time to chroot into /target and install any packages that will be needed to boot your new system."))
-        self.builder.get_object("label_custom_install_directions_5").set_label(_("During the install, you will be required to write your own /etc/fstab."))
-        self.builder.get_object("label_custom_install_directions_6").set_label(_("If you aren't sure what any of this means, please go back and deselect manual partition management."))
-
-        # custom install installation paused directions
-        self.builder.get_object("label_custom_install_paused_1").set_label(_("Please do the following and then click Forward to finish installation:"))
-        self.builder.get_object("label_custom_install_paused_2").set_label(_("Create /target/etc/fstab for the filesystems as they will be mounted in your new system, matching those currently mounted at /target (without using the /target prefix in the mount paths themselves)."))
-        self.builder.get_object("label_custom_install_paused_3").set_label(_("Install any packages that may be needed for first boot (mdadm, cryptsetup, dmraid, etc) by calling \"sudo chroot /target\" followed by the relevant apt-get/aptitude installations."))
-        self.builder.get_object("label_custom_install_paused_4").set_label(_("Note that in order for update-initramfs to work properly in some cases (such as dm-crypt), you may need to have drives currently mounted using the same block device name as they appear in /target/etc/fstab."))
-        self.builder.get_object("label_custom_install_paused_5").set_label(_("Double-check that your /target/etc/fstab is correct, matches what your new system will have at first boot, and matches what is currently mounted at /target."))
 
         # Columns
         for col, title in zip(self.builder.get_object("treeview_disks").get_columns(),
@@ -396,6 +396,9 @@ class InstallerWindow:
         self.setup.hostname = entry.props.text
         self.setup.print_setup()
 
+    def min_cb (self, widget):
+        self.window.iconify()
+
     def quit_cb(self, widget, data=None):
         if QuestionDialog(_("Quit"), _("Are you sure you want to quit the installer?")):
             Gtk.main_quit()
@@ -410,7 +413,7 @@ class InstallerWindow:
 
         # Try to find out where we're located...
         try:
-            from urllib.request import urlopen
+            from urllib import urlopen
         except ImportError:  # py3
             from urllib.request import urlopen
         try:
@@ -424,7 +427,7 @@ class InstallerWindow:
 
         self.cur_country_code = cur_country_code or os.environ.get('LANG', 'US').split('.')[0].split('_')[-1]  # fallback to LANG location or 'US'
         self.cur_timezone = cur_timezone
-
+       
         #Load countries into memory
         countries = {}
         iso_standard = "3166"
@@ -447,13 +450,16 @@ class InstallerWindow:
         for line in subprocess.getoutput("isoquery --iso %s | cut -f1,4-" % iso_standard).split('\n'):
             cols = line.split(None, 1)
             if len(cols) > 1:
-                if cols[0] not in list(languages.keys()):
+                if cols[0] not in languages.keys():
                     name = cols[1].replace(";", ",")
                     languages[cols[0]] = name
 
         # Construct language selection model
         model = Gtk.ListStore(str, str, GdkPixbuf.Pixbuf, str)
+        language_store = Gtk.ListStore(str, str, GdkPixbuf.Pixbuf, str)
+
         set_iter = None
+        tree_iter = None
         flag_path = lambda ccode: self.resource_dir + '/flags/16/' + ccode.lower() + '.png'
         from utils import memoize
         flag = memoize(lambda ccode: GdkPixbuf.Pixbuf.new_from_file(flag_path(ccode)))
@@ -478,12 +484,20 @@ class InstallerWindow:
                     pass
                 country = ''
             pixbuf = flag(ccode) if not lang in 'eo ia' else flag('_' + lang)
+
             iter = model.append((language, country, pixbuf, locale))
+            
+            if ((lang == 'en' and country == 'United States')or lang == 'ko'):
+                i = language_store.append((language, country, pixbuf, locale))
+                if(lang == 'ko'):
+                    set_language_init = i;
+
             if (ccode == self.cur_country_code and
                 (not set_iter or
                  set_iter and lang == 'en' or  # prefer English, or
                  set_iter and lang == ccode.lower())):  # fuzzy: lang matching ccode (fr_FR, de_DE, es_ES, ...)
                 set_iter = iter
+                tree_iter = i
 
         # Sort by Country, then by Language
         model.set_sort_column_id(0, Gtk.SortType.ASCENDING)
@@ -495,30 +509,46 @@ class InstallerWindow:
             path = model.get_path(set_iter)
             treeview.set_cursor(path)
             treeview.scroll_to_cell(path)
+
+        combobox = self.builder.get_object("combobox_language")
+        combobox.set_model(language_store)
+        combobox.set_active_iter(set_language_init);
     
-    def map_scrollable(self):
-        window = Gtk.Window()
-        screen = window.get_screen()
-        screen_width = screen.width()
-        screen_height = screen.height()
-
-        scrolled_window = self.builder.get_object("scrolled_timezones")
-
-        if screen_height <= 600:
-            scrolled_window.set_min_content_height(360)
+    def build_kb_variants (self):
+        if ("_" in self.setup.language):
+            country_code = self.setup.language.split("_")[1]
         else:
-            scrolled_window.set_min_content_height(410)
+            country_code = self.setup.language
+            
+        treeview = self.builder.get_object("treeview_layouts")
+        model = treeview.get_model()
+        iter = model.get_iter_first()
+        while iter is not None:
+            iter_country_code = model.get_value(iter, 1)
+            if iter_country_code.lower() == country_code.lower():
+                self.setup.keyboard_layout = iter_country_code.lower()
+                column = treeview.get_column(0)
+                path = model.get_path(iter)
+                treeview.set_cursor(path)
+                treeview.scroll_to_cell(path, column=column)
+                break
+            iter = model.iter_next(iter)
 
-        if screen_width <= 800:
-            scrolled_window.set_min_content_width(450)
-        else:
-            scrolled_window.set_min_content_width(800)
+        # Set the correct variant list model ...
+        model = self.layout_variants[iter_country_code]
+        self.builder.get_object("treeview_variants").set_model(model)
+        # ... and select the first variant (standard)
+        #self.builder.get_object("treeview_variants").set_cursor(0)
+
+        self.builder.get_object("combobox_layout").set_model(model)
+        self.builder.get_object("combobox_layout").set_active(0)
 
     def build_kb_lists(self):
         ''' Do some xml kung-fu and load the keyboard stuffs '''
         # Determine the layouts in use
         (keyboard_geom,
          self.setup.keyboard_layout) = subprocess.getoutput("setxkbmap -query | awk '/^(model|layout)/{print $2}'").split()
+
         # Build the models
         from collections import defaultdict
         def _ListStore_factory():
@@ -535,6 +565,7 @@ class InstallerWindow:
         xml = ET.parse('/usr/share/X11/xkb/rules/xorg.xml')
         for node in xml.iterfind('.//modelList/model/configItem'):
             name, desc = node.find('name').text, node.find('description').text
+            desc = desc[:37]+ (desc[37:] and '..')
             iterator = models.append((desc, name))
             if name == keyboard_geom:
                 set_keyboard_model = iterator
@@ -549,12 +580,18 @@ class InstallerWindow:
                 var_desc = var_desc if var_desc.startswith(desc) else '{} - {}'.format(desc, var_desc)
                 if name in NON_LATIN_KB_LAYOUTS and "Latin" not in var_desc:
                     var_desc = "English (US) + %s" % var_desc
+                var_desc = var_desc[:42]+ (var_desc[42:] and '..')
                 variants[name].append((var_desc, var_name))
             if name in NON_LATIN_KB_LAYOUTS:
                 desc = desc + " *"
-            iterator = layouts.append((desc, name))
+
+            #if( ('English' in desc) or desc == 'Korean'):
+            if( desc == 'English (US)' or desc == 'Korean'):
+                iterator = layouts.append((desc, name))
+
             if name == self.setup.keyboard_layout:
                 set_keyboard_layout = iterator
+
         # Set the models
         self.builder.get_object("combobox_kb_model").set_model(models)
         self.builder.get_object("treeview_layouts").set_model(layouts)
@@ -587,6 +624,25 @@ class InstallerWindow:
                 except:
                     pass # Best effort. Fails the first time as self.column1 doesn't exist yet.
 
+    def assign_lang(self, combobox, data=None):
+        tree_iter = combobox.get_active_iter()
+
+        if tree_iter is not None:
+            model = combobox.get_model()
+            self.setup.language = model[tree_iter][3]
+            self.setup.print_setup()
+            self.set_agreement()
+            gettext.translation('live-installer', "/usr/share/gooroom/locale",
+                        languages=[self.setup.language, self.setup.language.split('_')[0]],
+                        fallback=True).install() 
+            try:
+                self.i18n()
+                self.activate_page(self.PAGE_SETTING)
+            except:
+                pass # Best effort. Fails the first time as self.column1 doesn't exist yet.
+
+        self.build_kb_variants()
+
     def assign_autologin(self, checkbox, data=None):
         self.setup.autologin = checkbox.get_active()
         self.setup.print_setup()
@@ -608,6 +664,18 @@ class InstallerWindow:
             self.setup.grub_device = row[0]
         self.setup.print_setup()
 
+    def show_test_keyboard (self,button):
+        key_test_win = self.builder.get_object("key_test_window")
+        key_test_win.run()
+        key_test_win.hide()
+        self.builder.get_object("entry_test_kb").set_text("")
+
+    def show_consent_form (self,button):
+        win = self.builder.get_object("consent_window")
+        win.set_title (_("Hancom Gooroom Software License Agreement"))
+        win.run()
+        win.hide()
+
     def assign_keyboard_model(self, combobox):
         ''' Called whenever someone updates the keyboard model '''
         model = combobox.get_model()
@@ -616,6 +684,19 @@ class InstallerWindow:
         if not __debug__:
             os.system('setxkbmap -model ' + self.setup.keyboard_model)
         self.setup.print_setup()
+
+    def combobox_timezones_changed_cb(self,combobox):
+        active_iter = combobox.get_active_iter()
+        model = combobox.get_model()
+        self.cur_timezone = model[active_iter]
+        for value in (self.cur_timezone):
+            if not value:
+                continue
+            for row in timezones.timezones:
+                if value in row:
+                    timezones.select_timezone(row)
+                    break
+            break
 
     def assign_keyboard_layout(self, treeview):
         ''' Called whenever someone updates the keyboard layout '''
@@ -629,9 +710,17 @@ class InstallerWindow:
         # ... and select the first variant (standard)
         self.builder.get_object("treeview_variants").set_cursor(0)
 
-    def assign_keyboard_variant(self, treeview):
+    def assign_keyboard_variant(self, combobox):
         ''' Called whenever someone updates the keyboard layout or variant '''
         #GObject.source_remove(self.kbd_preview_generation)  # stop previous preview generation, if any
+        active_iter = combobox.get_active_iter()
+        treeview = self.builder.get_object("treeview_variants")
+        c_model = treeview.get_model()
+        if active_iter:
+            path = c_model.get_path(active_iter)
+            treeview.set_cursor(path)
+            treeview.scroll_to_cell(path)
+
         model, active = treeview.get_selection().get_selected_rows()
         if not active: return
         (self.setup.keyboard_variant_description,
@@ -665,6 +754,10 @@ class InstallerWindow:
             self.setup.print_setup()
 
         # Set preview image
+        #self.builder.get_object("image_keyboard").set_from_file(LOADING_ANIMATION)
+        self.kbd_preview_generation = GObject.timeout_add(500, self._generate_keyboard_layout_preview)
+
+        # Set preview image
         self.builder.get_object("image_keyboard").set_from_file(LOADING_ANIMATION)
         self.kbd_preview_generation = GObject.timeout_add(500, self._generate_keyboard_layout_preview)
 
@@ -680,74 +773,75 @@ class InstallerWindow:
         return False
 
     def activate_page(self, index):
-        help_text = _(self.wizard_pages[index].help_text)
-        self.builder.get_object("help_label").set_markup("<big><b>%s</b></big>" % help_text)
-        # self.builder.get_object("help_icon").set_from_file("/usr/share/live-installer/icons/%s" % self.wizard_pages[index].icon)
-        self.builder.get_object("notebook1").set_current_page(index)
+        title = _(self.wizard_pages[index].title)
+        description = _(self.wizard_pages[index].desc)
+
+        self.builder.get_object("title").set_markup("<span font='24px'><b>%s</b></span>" % title)
+        self.builder.get_object("desc").set_markup("%s" % description)
+
+        def current_page(idx):
+            switch = {
+                self.PAGE_INTRO:'intro_page',
+                self.PAGE_SETTING:'setting_page',
+                self.PAGE_PARTITIONS:'partitions_page',
+                self.PAGE_OVERVIEW:'overview_page',
+                self.PAGE_INSTALL:'install_page',
+                self.PAGE_FINISH:'finish_page'
+            }
+            return switch.get(idx,-1)
+
+        small_right = self.builder.get_object('small_right').get_style_context();
+        right = self.builder.get_object('right').get_style_context();
+
+        if(current_page(index) == 'intro_page' or 
+                current_page(index) == 'install_page' or
+                current_page(index) == 'finish_page'):
+            self.builder.get_object('button_next').hide()
+            self.builder.get_object('button_back').hide()
+            right.remove_class("main_window")
+            small_right.add_class("main_window")
+        else:
+            self.builder.get_object('button_next').show()
+            self.builder.get_object('button_back').show()
+            right.add_class("main_window")
+            small_right.remove_class("main_window")
+
+        self.builder.get_object('installer_stack').set_visible_child_name(current_page(index))
+
         # TODO: move other page-depended actions from the wizard_cb into here below
-        if index == self.PAGE_LANGUAGE:
-            self.builder.get_object("button_back").set_sensitive(False)
-        elif index == self.PAGE_PARTITIONS:
+        if index == self.PAGE_PARTITIONS:
             self.setup.skip_mount = False
-        elif index == self.PAGE_CUSTOMWARNING:
-            self.setup.skip_mount = True
-        elif index ==  self.PAGE_INSTALL:
+        elif index == self.PAGE_INSTALL:
             import threading
             thr1 = threading.Thread(target=self.do_install)
             thr1.daemon = True
             thr1.start()
 
-            slideshow = Slideshow(self.slideshow_browser, self.slideshow_path)
-            thr2 = threading.Thread(target=slideshow.run)
-            thr2.daemon = True
-            thr2.start()
-
     def wizard_cb(self, widget, goback, data=None):
         ''' wizard buttons '''
-        sel = self.builder.get_object("notebook1").get_current_page()
+        stack = self.builder.get_object("installer_stack")
         self.builder.get_object("button_back").set_sensitive(True)
+        current_page = stack.get_visible_child_name()
+        height = 0;
 
-        # check each page for errors
-        if(not goback):
-            if(sel == self.PAGE_LANGUAGE):
+        if (not goback):
+            if(current_page == "intro_page"):
+                self.activate_page(self.PAGE_SETTING)
+            elif (current_page == "setting_page"):
+                height = self.builder.get_object("first_page").get_allocated_height ()
+                self.builder.get_object("vbox4").set_size_request (-1, height)
+                self.builder.get_object("vbox12").set_size_request (-1, height)
+
                 if self.setup.language is None:
                     WarningDialog(_("Installation Tool"), _("Please choose a language"))
-                else:
-                    lang_country_code = self.setup.language.split('_')[-1]
-                    for value in (self.cur_timezone,      # timezone guessed from IP
-                                  self.cur_country_code,  # otherwise pick country from IP
-                                  lang_country_code):     # otherwise use country from language selection
-                        if not value:
-                            continue
-                        for row in timezones.timezones:
-                            if value in row:
-                                timezones.select_timezone(row)
-                                break
-                        break
-                    self.activate_page(self.PAGE_TIMEZONE)
-            elif (sel == self.PAGE_TIMEZONE):
-                if ("_" in self.setup.language):
-                    country_code = self.setup.language.split("_")[1]
-                else:
-                    country_code = self.setup.language
-                treeview = self.builder.get_object("treeview_layouts")
-                model = treeview.get_model()
-                iter = model.get_iter_first()
-                while iter is not None:
-                    iter_country_code = model.get_value(iter, 1)
-                    if iter_country_code.lower() == country_code.lower():
-                        column = treeview.get_column(0)
-                        path = model.get_path(iter)
-                        treeview.set_cursor(path)
-                        treeview.scroll_to_cell(path, column=column)
-                        break
-                    iter = model.iter_next(iter)
-                self.activate_page(self.PAGE_KEYBOARD)
-            elif(sel == self.PAGE_KEYBOARD):
+                self.activate_page(self.PAGE_PARTITIONS)
                 if not self.PARTITIONING_DONE:
                     partitioning.build_partitions(self)
-                self.activate_page(self.PAGE_PARTITIONS)
-            elif(sel == self.PAGE_PARTITIONS):
+
+                partitioning.build_grub_partitions()
+
+            elif (current_page == "partitions_page"):
+
                 model = self.builder.get_object("treeview_disks").get_model()
 
                 # Check for root partition
@@ -791,22 +885,17 @@ class InstallerWindow:
                 self.activate_page(self.PAGE_OVERVIEW)
                 self.show_overview()
                 self.builder.get_object("treeview_overview").expand_all()
-                self.builder.get_object("button_next").set_label(_("Install")) 
-
-            elif(sel == self.PAGE_OVERVIEW):
-                self.builder.get_object("button_next").set_sensitive(False)
-                self.builder.get_object("button_back").set_sensitive(False)
+                self.button_next.set_label(_("Install"))
+ 
+            elif (current_page == "overview_page"):
                 self.activate_page(self.PAGE_INSTALL)
-            elif(sel == self.PAGE_CUSTOMPAUSED):
-                self.builder.get_object("button_next").hide()
-                self.activate_page(self.PAGE_INSTALL)
-                self.paused = False
         else:
-            self.builder.get_object("button_back").set_sensitive(True)
-            if(sel == self.PAGE_OVERVIEW):
-                self.builder.get_object("button_next").set_label(_("Next"))
+            if (current_page == "install_page"):
+                self.activate_page(self.PAGE_OVERVIEW)
+            elif (current_page == "overview_page"):
+                self.button_next.set_label(_("Next"))
                 self.activate_page(self.PAGE_PARTITIONS)
-            elif(sel == self.PAGE_PARTITIONS):
+            elif (current_page == "partitions_page"):
                 #to prevent duplication of partition
                 found_root_partition = False
                 for partition in self.setup.partitions:
@@ -814,11 +903,9 @@ class InstallerWindow:
                         found_root_partition = True
                 if found_root_partition:
                     self.PARTITIONING_DONE = True
-                self.activate_page(self.PAGE_KEYBOARD)
-            elif(sel == self.PAGE_KEYBOARD):
-                self.activate_page(self.PAGE_TIMEZONE)
-            elif(sel == self.PAGE_TIMEZONE):
-                self.activate_page(self.PAGE_LANGUAGE)
+                self.activate_page(self.PAGE_SETTING)
+            elif (current_page == "setting_page"):
+                self.activate_page(self.PAGE_INTRO)
 
     def show_overview(self):
         bold = lambda str: '<b>' + str + '</b>'
@@ -871,14 +958,14 @@ class InstallerWindow:
     def do_install(self):
         print(" ## INSTALLATION ")
         ''' Actually perform the installation .. '''
-        inst = self.installer
 
         if __debug__:
             print(" ## DEBUG MODE - INSTALLATION PROCESS NOT LAUNCHED")
-            time.sleep(200)
+            time.sleep(10)
             Gtk.main_quit()
             sys.exit(0)
 
+        inst = self.installer
         inst.set_progress_hook(self.update_progress)
         inst.set_error_hook(self.error_message)
 
@@ -920,7 +1007,8 @@ class InstallerWindow:
             if self.critical_error_happened:
                 self.show_error_dialog(_("Installation error"), self.critical_error_message)
             else:
-                self.show_reboot_dialog()
+                #self.show_reboot_dialog()
+                self.activate_page(self.PAGE_FINISH)
 
             while(self.showing_last_dialog):
                 time.sleep(0.1)
@@ -971,3 +1059,37 @@ class InstallerWindow:
 
     def disable_right_cb(self,web_view, context_menu, event, hit_test_result):
         context_menu.remove_all()
+
+    def set_round_edges (self, window):
+        screen = window.get_screen();
+
+        if(screen.is_composited()):
+            visual = screen.get_rgba_visual();
+            
+            if(visual is None):
+                visual = screen.get_system_visual (screen)
+                
+            window.set_visual (visual);
+
+    def set_agreement(self):
+        scrolledwindow = self.builder.get_object("scrolled_agreement")
+        if(scrolledwindow.get_child()!= None):
+            scrolledwindow.remove(scrolledwindow.get_child())
+
+        languages=self.setup.language.split('_')[0]
+        self.agree_path = "/usr/share/live-installer/contract/%s/"%languages
+        if os.path.exists(self.agree_path):
+            agreement = WebKit2.WebView.new()
+            agreement.connect('context_menu',self.disable_right_cb)
+            agreement.load_uri("file://" + os.path.join(self.agree_path, 'contract_form.html'))
+            scrolledwindow.add_with_viewport(agreement)
+            scrolledwindow.show_all()
+
+    def is_consent (self, button):
+        if button.get_active():
+            self.button_next.set_sensitive(True)
+        else:
+            self.button_next.set_sensitive(False)
+
+    def button_reboot_cb(self, button):
+        os.system('reboot')
