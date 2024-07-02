@@ -961,11 +961,15 @@ class InstallerWindow:
 
         if __debug__:
             print(" ## DEBUG MODE - INSTALLATION PROCESS NOT LAUNCHED")
+            time.sleep(1)
+            self.builder.get_object("label_install_progress").set_width_chars(65)
+            self.builder.get_object("label_install_progress").set_label("1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890")
             time.sleep(10)
             Gtk.main_quit()
             sys.exit(0)
 
         inst = self.installer
+        self.builder.get_object("label_install_progress").set_width_chars(65)
         inst.set_progress_hook(self.update_progress)
         inst.set_error_hook(self.error_message)
 

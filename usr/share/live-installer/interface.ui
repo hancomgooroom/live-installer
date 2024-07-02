@@ -666,7 +666,7 @@
                                 <property name="spacing">10</property>
                                 <child>
                                   <object class="GtkBox" id="vbox16">
-                                    <property name="width-request">400</property>
+                                    <property name="width-request">600</property>
                                     <property name="visible">True</property>
                                     <property name="can-focus">False</property>
                                     <property name="halign">start</property>
@@ -675,7 +675,7 @@
                                     <property name="spacing">10</property>
                                     <child>
                                       <object class="GtkProgressBar" id="progressbar">
-                                        <property name="width-request">400</property>
+                                        <property name="width-request">600</property>
                                         <property name="visible">True</property>
                                         <property name="can-focus">False</property>
                                         <property name="halign">start</property>
@@ -689,11 +689,13 @@
                                     </child>
                                     <child>
                                       <object class="GtkLabel" id="label_install_progress">
+                                        <property name="width-request">550</property>
                                         <property name="visible">True</property>
                                         <property name="can-focus">False</property>
                                         <property name="halign">start</property>
-                                        <property name="label" translatable="yes">label</property>
                                         <property name="ellipsize">middle</property>
+                                        <property name="width-chars">65</property>
+                                        <property name="max-width-chars">65</property>
                                         <property name="xalign">0</property>
                                       </object>
                                       <packing>
@@ -704,8 +706,8 @@
                                     </child>
                                   </object>
                                   <packing>
-                                    <property name="expand">True</property>
-                                    <property name="fill">True</property>
+                                    <property name="expand">False</property>
+                                    <property name="fill">False</property>
                                     <property name="position">2</property>
                                   </packing>
                                 </child>
