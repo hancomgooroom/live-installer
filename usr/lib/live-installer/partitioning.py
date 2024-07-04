@@ -157,7 +157,7 @@ def manually_edit_partitions(widget):
     preferred = model[iter][-1] if iter else ''  # prefer disk currently selected and show it first in gparted
     disks = ' '.join(sorted((disk for disk,desc in model.disks), key=lambda disk: disk != preferred))
     os.system('umount ' + disks)  # umount disks (if possible) so gparted works out-of-the-box
-    os.popen('gparted {} &'.format(disks))
+    os.popen('LANG=%s.UTF-8 gparted {} &'.format(disks) %installer.setup.language)
 
 def build_grub_partitions():
     grub_model = Gtk.ListStore(str)
