@@ -93,6 +93,11 @@ class InstallerWindow:
          self.PAGE_FINISH) = range(6)
         self.wizard_pages = list(range(6))
 
+        self.accel_group = Gtk.AccelGroup()
+        key, mod = Gtk.accelerator_parse("F1")
+        self.accel_group.connect(key, mod, Gtk.AccelFlags.VISIBLE, self.open_help)
+        self.window.add_accel_group(self.accel_group)
+
         # set the button events (wizard_cb)
         self.builder.get_object("start_gooroom_btn").connect("clicked", self.wizard_cb, False)
         self.builder.get_object("button_next").connect("clicked", self.wizard_cb, False)
@@ -262,6 +267,9 @@ class InstallerWindow:
         self.PARTITIONING_DONE = False
 
         self.window.show_all()
+
+    def open_help(self, key, mod, flag, widget):
+        os.system("yelp help:live-installer")
 
     def update_preview_cb(self, dialog, preview):
         filename = dialog.get_preview_filename()
