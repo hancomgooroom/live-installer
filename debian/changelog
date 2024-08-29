@@ -1,3 +1,13 @@
+live-installer (2024.03.11+grm4u1+han4u1) unstable; urgency=medium
+
+  [ boyeon.choi ]
+  * [6c991b66] Init Hancom Gooroom V4
+  * [06687086] [HGOOROOM-2247]Fix the prgrssbar's width
+  * [d0057a8c] [HGOOROOM-2252] Language check when running gparted
+  * [1139fb16] enable F1 for yelp
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Fri, 30 Aug 2024 06:38:27 +0900
+
 live-installer (2024.03.11+grm4u1) unstable; urgency=medium
 
   [ jongkyung.woo ]
